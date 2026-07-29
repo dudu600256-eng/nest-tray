@@ -1,0 +1,27 @@
+# Python
+note-backend/.venv/
+note-backend/__pycache__/
+note-backend/**/__pycache__/
+note-backend/**/*.pyc
+note-backend/*.spec
+note-backend/dist/
+note-backend/build/
+
+# Rust
+note-tray/src-tauri/target/
+note-tray/src-tauri/resources/note-backend/_internal/
+
+# Node
+note-tray/node_modules/
+note-tray/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Release
+nest-tray-dist/

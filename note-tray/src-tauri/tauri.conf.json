@@ -1,0 +1,57 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "衔泥 NestTray",
+  "version": "0.1.0",
+  "identifier": "com.nesttray.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "衔泥 NestTray",
+        "width": 500,
+        "height": 500,
+        "minWidth": 420,
+        "minHeight": 360,
+        "visible": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "resources/note-backend/*"
+    ],
+    "windows": {
+      "wix": null,
+      "nsis": null
+    }
+  },
+  "plugins": {
+    "shell": {
+      "sidecar": true,
+      "scope": [
+        {
+          "name": "python-sidecar",
+          "cmd": "main.exe",
+          "args": true
+        }
+      ]
+    }
+  }
+}
