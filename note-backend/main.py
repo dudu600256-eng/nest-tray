@@ -338,6 +338,7 @@ class App:
         # Per-handler timeout overrides (in seconds, None = no timeout)
         self._timeouts: dict[str, float | None] = {
             "ocr.extract": 60,
+            "note.delete_folder": 15,
             "search.rebuild": None,  # no timeout
             "ocr.store": 60,
         }
@@ -521,11 +522,11 @@ class App:
                 import shutil
                 shutil.rmtree(img_dir, ignore_errors=True)
 
-            # Remove the folder itself (if empty)
-            try:
-                root.rmdir()
-            except OSError:
-                pass  # may not be empty, that's fine
+            # Remove the entire folder tree recursively
+            # (handles subdirectories that don't contain .md files)
+            import shutil
+            shutil.rmtree(root, ignore_errors=True)
+            logger.info("Deleted folder tree: %s", root)
 
             return {"ok": True}
 

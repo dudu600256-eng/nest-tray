@@ -18,11 +18,12 @@ impl SidecarConfig {
     ///
     /// Backend directory:
     /// 1. `NOTE_BACKEND_DIR` environment variable
-    /// 2. Sidecar binary `resources/note-backend/` (bundled)
-    /// 3. Resolve from the cargo manifest dir (dev mode)
+    /// 2. Source `note-backend/` directory (dev mode with Python interpreter)
+    /// 3. Sidecar binary `resources/note-backend/` (bundled exe)
     pub fn new(kb_root: &str) -> Self {
         let python_exe = resolve_python();
-        let backend_dir = resolve_backend_dir();
+        let is_bundled = !python_exe.ends_with("python.exe") && !python_exe.ends_with("python3.exe");
+        let backend_dir = resolve_backend_dir(!is_bundled);  // prefer_source = true when using interpreter
 
         SidecarConfig {
             python_exe,
@@ -67,12 +68,19 @@ fn which_real_python() -> Result<std::path::PathBuf, String> {
 }
 
 /// Resolve backend directory path, with debug output.
-pub fn resolve_backend_dir() -> String {
+///
+/// * `prefer_source` — if `true` (dev mode, Python interpreter), prefer the source
+///   `note-backend/` directory. If `false` (bundled exe), prefer the resources dir.
+pub fn resolve_backend_dir(prefer_source: bool) -> String {
     let dir = std::env::var("NOTE_BACKEND_DIR").unwrap_or_else(|_| {
         // Try: from CARGO_MANIFEST_DIR (compile-time), canonicalized
-        let from_cargo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        // Path: {manifest_dir}/../../note-backend (skip parent() once for src-tauri, once for note-tray)
+        let manif = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let from_cargo = manif
             .parent()
-            .and_then(|p| p.join("..").join("note-backend").canonicalize().ok())
+            .and_then(|p| p.parent())
+            .map(|p| p.join("note-backend"))
+            .and_then(|p| p.canonicalize().ok())
             .filter(|p| p.exists());
         // Try: from current working directory
         let from_cwd = std::env::current_dir()
@@ -81,14 +89,29 @@ pub fn resolve_backend_dir() -> String {
             .filter(|p| p.exists());
         let bundled = std::path::PathBuf::from("resources").join("note-backend");
 
-        if bundled.exists() {
-            bundled.canonicalize().unwrap_or(bundled).to_string_lossy().to_string()
-        } else if let Some(p) = from_cargo {
-            p.to_string_lossy().to_string()
-        } else if let Some(p) = from_cwd {
-            p.to_string_lossy().to_string()
+        if prefer_source {
+            // Dev mode (Python interpreter): use source code directory
+            if let Some(p) = from_cargo {
+                p.to_string_lossy().to_string()
+            } else if let Some(p) = from_cwd {
+                p.to_string_lossy().to_string()
+            } else if bundled.exists() {
+                // Fallback: bundled resources (won't have main.py but try anyway)
+                bundled.canonicalize().unwrap_or(bundled).to_string_lossy().to_string()
+            } else {
+                format!("{}/note-backend", std::env::current_dir().map(|d| d.to_string_lossy().to_string()).unwrap_or_default())
+            }
         } else {
-            format!("{}/note-backend", std::env::current_dir().map(|d| d.to_string_lossy().to_string()).unwrap_or_default())
+            // Bundled exe mode: use resources directory
+            if bundled.exists() {
+                bundled.canonicalize().unwrap_or(bundled).to_string_lossy().to_string()
+            } else if let Some(p) = from_cargo {
+                p.to_string_lossy().to_string()
+            } else if let Some(p) = from_cwd {
+                p.to_string_lossy().to_string()
+            } else {
+                format!("{}/note-backend", std::env::current_dir().map(|d| d.to_string_lossy().to_string()).unwrap_or_default())
+            }
         }
     });
     eprintln!("[sidecar] Backend dir: {}", dir);

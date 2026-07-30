@@ -9,6 +9,41 @@ const surface = "#161b22";
 const border = "#30363d";
 const textDim = "#8b949e";
 const inputBg = "#0d1117";
+const danger = "#f85149";
+
+/* ── ConfirmDialog ── 内联确认弹窗，不超出窗口范围 */
+function ConfirmDialog({open, title, message, confirmLabel, onConfirm, onCancel}: {
+  open: boolean; title: string; message: string; confirmLabel?: string;
+  onConfirm: () => void; onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 200,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "rgba(0,0,0,0.55)",
+    }} onClick={onCancel}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: surface, border: `1px solid ${border}`, borderRadius: 8,
+        padding: "16px 18px", maxWidth: 300, width: "90%",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{title}</div>
+        <div style={{ fontSize: 12, color: textDim, lineHeight: 1.5, marginBottom: 14 }}>{message}</div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={onCancel} style={{
+            padding: "6px 14px", border: `1px solid ${border}`, borderRadius: 5,
+            background: "transparent", color: textDim, fontSize: 12, cursor: "pointer",
+          }}>取消</button>
+          <button onClick={onConfirm} style={{
+            padding: "6px 14px", border: "none", borderRadius: 5,
+            background: danger, color: "#fff", fontSize: 12, cursor: "pointer",
+          }}>{confirmLabel || "确认删除"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function collectFolders(items: TreeItem[]): string[] {
   const folders: string[] = [];
@@ -24,8 +59,8 @@ function collectFolders(items: TreeItem[]): string[] {
 function folderDisplayName(path: string): string { return path.split("/").pop() || path; }
 function folderDepth(path: string): number { return path.split("/").length - 1; }
 
-function SearchableFolderSelect({folders, value, onChange, onDeleteFolder}: {
-  folders: string[]; value: string; onChange: (v: string) => void; onDeleteFolder?: (f: string) => void;
+function SearchableFolderSelect({folders, value, onChange}: {
+  folders: string[]; value: string; onChange: (v: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -65,14 +100,6 @@ function SearchableFolderSelect({folders, value, onChange, onDeleteFolder}: {
                 ✏ 新建 "{search}"
               </OptionItem>
             )}
-            {value && !search && (
-              <>
-                <div style={{ height: 1, background: border, margin: "4px 0" }} />
-                <OptionItem active={false} onClick={() => { onDeleteFolder?.(value); setOpen(false); }} style={{ color: "#f85149" }}>
-                  🗑 删除 "{value}"
-                </OptionItem>
-              </>
-            )}
           </div>
         </div>
       )}
@@ -98,6 +125,7 @@ export default function CaptureWindow() {
   const [screenshotPath, setScreenshotPath] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState("");
   const [ocrStep, setOcrStep] = useState<"idle" | "captured" | "extracting" | "preview">("idle");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);  // 待删除的项目名
 
   const loadFolders = useCallback(async () => {
     try { const r = JSON.parse(await invoke("backend_call", { method: "browser.tree", params: "{}" }) as string); if (r.tree) setFolders(collectFolders(r.tree)); } catch {}
@@ -165,22 +193,59 @@ export default function CaptureWindow() {
   };
 
   const resetScreenshot = () => { setScreenshotPath(null); setOcrText(""); setOcrStep("idle"); };
-  const handleDeleteFolder = async (f: string) => {
-    if (!f || !confirm(`确定要删除项目 "${f}" 及其所有笔记？`)) return;
+
+  // ── 删除确认弹窗 ──
+  const handleRequestDelete = () => {
+    if (!folder) return;
+    setDeleteTarget(folder);
+  };
+
+  const handleConfirmDelete = async () => {
+    const f = deleteTarget;
+    if (!f) return;
+    setDeleteTarget(null);
     setStatus("删除中…");
-    try { await invoke("backend_call", { method: "note.delete_folder", params: JSON.stringify({ folder: f }) }); setStatus("✅ 已删除"); setFolder(""); loadFolders(); }
-    catch (e) { setStatus(`删除失败: ${e}`); }
+    try {
+      await invoke("backend_call", { method: "note.delete_folder", params: JSON.stringify({ folder: f }) });
+      setStatus("✅ 已删除");
+      setFolder("");
+      loadFolders();
+    } catch (e) {
+      // 显示具体错误信息
+      setStatus(`❌ 删除失败: ${e}`);
+    }
   };
 
   const btnStyle: React.CSSProperties = { width: "100%", padding: "8px 0", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "opacity 0.15s", background: accent, color: "#fff" };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, height: "100%" }}>
-      {/* Folder selector */}
+    <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 8, height: "100%" }}>
+      {/* Folder selector — 删除按钮在右侧 */}
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <span style={{ fontSize: 13, color: textDim }}>📁</span>
-        <SearchableFolderSelect folders={folders} value={folder} onChange={setFolder} onDeleteFolder={handleDeleteFolder} />
+        <SearchableFolderSelect folders={folders} value={folder} onChange={setFolder} />
+        {folder && (
+          <button onClick={handleRequestDelete} title="删除项目"
+            style={{
+              flexShrink: 0, width: 30, height: 30,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "none", borderRadius: 6, cursor: "pointer",
+              background: "transparent", color: danger, fontSize: 14,
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = "#2d1517"}
+            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+          >🗑</button>
+        )}
       </div>
+
+      {/* 删除确认弹窗 */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="删除项目"
+        message={`确定要删除项目「${folderDisplayName(deleteTarget || "")}」及其所有笔记？此操作不可撤销。`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       {/* Mode tabs */}
       <div style={{ display: "flex", gap: 4, background: surface, borderRadius: 6, padding: 2 }}>
@@ -236,10 +301,10 @@ export default function CaptureWindow() {
         </div>
       )}
 
-      {/* Status */}
+      {/* Status — 错误信息红色显示 */}
       {status && (
         <div style={{
-          fontSize: 12, color: status.startsWith("✅") || status.startsWith("已保存") ? "#2ea043" : status.startsWith("OCR") ? "#d29922" : "#f85149",
+          fontSize: 12, color: status.startsWith("✅") || status.startsWith("已保存") ? "#2ea043" : status.startsWith("❌") ? danger : "#d29922",
           textAlign: "center", padding: "4px 0",
         }}>
           {status}

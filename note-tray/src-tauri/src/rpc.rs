@@ -18,8 +18,15 @@ pub struct RpcClient {
 
 impl RpcClient {
     pub fn spawn(python_exe: &str, backend_dir: &str, kb_root: &str) -> Result<Self, String> {
-        let mut child = Command::new(python_exe)
-            .arg("main.py")
+        // If python_exe is a standalone bundled exe (not python interpreter),
+        // don't pass main.py as argument
+        let is_bundled = !python_exe.ends_with("python.exe") && !python_exe.ends_with("python3.exe");
+
+        let mut cmd = Command::new(python_exe);
+        if !is_bundled {
+            cmd.arg("main.py");
+        }
+        let mut child = cmd
             .current_dir(backend_dir)
             .env("NOTE_KB_ROOT", kb_root)
             .env("PYTHONIOENCODING", "utf-8")
